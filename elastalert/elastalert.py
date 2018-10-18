@@ -930,6 +930,7 @@ class ElastAlerter():
                 '@timestamp': ts_now(),
                 'time_taken': time_taken}
         self.writeback('elastalert_status', body)
+        rule['type'].save()
 
         return num_matches
 

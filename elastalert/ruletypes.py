@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 import copy
 import datetime
+import dill
+from os import path
+import pickle
 import sys
 
 from blist import sortedlist
@@ -30,11 +33,36 @@ class RuleType(object):
     def __init__(self, rules, args=None):
         self.matches = []
         self.rules = rules
-        self.occurrences = {}
+        if 'name' in rules:
+            self.data_path = path.join('/var/lib/elastalert',
+                                       '{}.pickle'.format(rules['name']))
+        else:
+            self.data_path = None
+        self.occurrences = self.load()
         self.rules['category'] = self.rules.get('category', '')
         self.rules['description'] = self.rules.get('description', '')
         self.rules['owner'] = self.rules.get('owner', '')
         self.rules['priority'] = self.rules.get('priority', '2')
+
+    def load(self):
+        """Load occurrences from pickled file."""
+        if not self.data_path:
+            return {}
+        try:
+            with open(self.data_path, 'r') as data_file:
+                return pickle.load(data_file)
+        except IOError:
+            return {}
+
+    def save(self):
+        """Save occurrences to pickled file."""
+        if not self.data_path:
+            return
+        try:
+            with open(self.data_path, 'w') as data_file:
+                pickle.dump(self.occurrences, data_file)
+        except IOError:
+            elastalert_logger.warning('Error saving to %s', self.data_path)
 
     def add_data(self, data):
         """ The function that the ElastAlert client calls with results from ES.

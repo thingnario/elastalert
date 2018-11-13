@@ -51,7 +51,8 @@ class RuleType(object):
         try:
             with open(self.data_path, 'r') as data_file:
                 return pickle.load(data_file)
-        except IOError:
+        except (IOError,EOFError):
+            elastalert_logger.warning('Error loading %s', self.data_path, exc_info=True)
             return {}
 
     def save(self):

@@ -954,6 +954,7 @@ class ElastAlerter():
             elastalert_logger.warning('Error connecting to Elasticsearch for rule {}. '
                                       'The rule has been disabled.'.format(new_rule['name']))
             self.send_notification_email(exception=e, rule=new_rule)
+            raise
             return False
 
         self.enhance_filter(new_rule)

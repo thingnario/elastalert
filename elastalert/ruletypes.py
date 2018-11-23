@@ -3,6 +3,7 @@ import copy
 import datetime
 import dill
 from os import path
+from os import rename
 import pickle
 import sys
 
@@ -49,7 +50,7 @@ class RuleType(object):
         try:
             with open(self.data_path, 'r') as data_file:
                 return pickle.load(data_file)
-        except (IOError,EOFError):
+        except (IOError, EOFError):
             elastalert_logger.warning('Error loading %s', self.data_path, exc_info=True)
             return {}
 
@@ -58,8 +59,10 @@ class RuleType(object):
         if not self.data_path:
             return
         try:
-            with open(self.data_path, 'w') as data_file:
+            tmp_path = self.data_path + '.temp'
+            with open(tmp_path, 'w') as data_file:
                 pickle.dump(self.occurrences, data_file)
+            rename(tmp_path, self.data_path)
         except IOError:
             elastalert_logger.warning('Error saving to %s', self.data_path)
 

@@ -11,7 +11,7 @@ import time
 import timeit
 import traceback
 from email.mime.text import MIMEText
-from smtplib import SMTP
+from smtplib import SMTP, SMTP_SSL
 from smtplib import SMTPException
 from socket import error
 
@@ -139,6 +139,11 @@ class ElastAlerter():
         self.notify_email = self.conf.get('notify_email', [])
         self.from_addr = self.conf.get('from_addr', 'ElastAlert')
         self.smtp_host = self.conf.get('smtp_host', 'localhost')
+        self.smtp_port = self.conf.get('smtp_port', 0)
+        self.smtp_ssl = self.conf.get('smtp_ssl', False)
+        self.smtp_tls = self.conf.get('smtp_tls', True)
+        self.smtp_username = self.conf.get('smtp_username', 'username')
+        self.smtp_password = self.conf.get('smtp_password', 'password')
         self.max_aggregation = self.conf.get('max_aggregation', 10000)
         self.alerts_sent = 0
         self.cumulative_hits = 0
@@ -954,6 +959,7 @@ class ElastAlerter():
             elastalert_logger.warning('Error connecting to Elasticsearch for rule {}. '
                                       'The rule has been disabled.'.format(new_rule['name']))
             self.send_notification_email(exception=e, rule=new_rule)
+            raise
             return False
 
         self.enhance_filter(new_rule)
@@ -1851,7 +1857,16 @@ class ElastAlerter():
         email['Reply-To'] = self.conf.get('email_reply_to', email['To'])
 
         try:
-            smtp = SMTP(self.smtp_host)
+            if self.smtp_ssl:
+                smtp = SMTP_SSL(self.smtp_host, self.smtp_port)
+            else:
+                smtp = SMTP(self.smtp_host, self.smtp_port)
+                if self.smtp_tls:
+                    elastalert_logger.info('SMTP Starting TLS extension')
+                    smtp.ehlo()
+                    smtp.starttls()
+                    smtp.ehlo()
+            smtp.login(self.smtp_username, self.smtp_password)
             smtp.sendmail(self.from_addr, recipients, email.as_string())
         except (SMTPException, error) as e:
             self.handle_error('Error connecting to SMTP host: %s' % (e), {'email_body': email_body})

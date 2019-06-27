@@ -4,7 +4,7 @@ import datetime
 import dill
 from os import path
 from os import rename
-import pickle
+import cPickle as pickle
 import sys
 
 from blist import sortedlist

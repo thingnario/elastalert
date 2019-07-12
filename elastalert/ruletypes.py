@@ -2,6 +2,7 @@
 import copy
 import datetime
 import dill
+import logging
 from os import path
 from os import rename
 import pickle
@@ -151,6 +152,7 @@ class CompareRule(RuleType):
 
     def add_data(self, data):
         # If compare returns true, add it as a match
+        logging.info('add_data, size of data = {}'.format(len(data)))
         for event in data:
             if self.compare(event):
                 self.add_match(event)
@@ -194,19 +196,23 @@ class ChangeRule(CompareRule):
     change_map = {}
     occurrence_time = {}
 
-    def compare(self, event):
-        key = hashable(lookup_es_key(event, self.rules['query_key']))
+    def get_values(self, key, event):
         values = []
         elastalert_logger.debug(" Previous Values of compare keys  " + str(self.occurrences))
         for val in self.rules['compound_compare_key']:
             lookup_value = lookup_es_key(event, val)
             values.append(lookup_value)
         elastalert_logger.debug(" Current Values of compare keys   " + str(values))
+        return values
 
-        changed = False
+    def check_null(self, values):
         for val in values:
             if not isinstance(val, bool) and not val and self.rules['ignore_null']:
-                return False
+                return True
+        return False
+
+    def _compare(self, key, event, values):
+        changed = False
         # If we have seen this key before, compare it to the new value
         if key in self.occurrences:
             for idx, previous_values in enumerate(self.occurrences[key]):
@@ -219,13 +225,26 @@ class ChangeRule(CompareRule):
                 # If using timeframe, only return true if the time delta is < timeframe
                 if key in self.occurrence_time:
                     changed = event[self.rules['timestamp_field']] - self.occurrence_time[key] <= self.rules['timeframe']
+        return changed
 
+    def update(self, key, event, values, changed):
         # Update the current value and time
         elastalert_logger.debug(" Setting current value of compare keys values " + str(values))
         self.occurrences[key] = values
         if 'timeframe' in self.rules:
             self.occurrence_time[key] = event[self.rules['timestamp_field']]
         elastalert_logger.debug("Final result of comparision between previous and current values " + str(changed))
+
+    def compare(self, event):
+        key = hashable(lookup_es_key(event, self.rules['query_key']))
+        values = self.get_values(key, event)
+
+        if self.check_null(values):
+            return False
+
+        changed = self._compare(key, event, values)
+
+        self.update(key, event, values, changed)
         return changed
 
     def add_match(self, match):

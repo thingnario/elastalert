@@ -197,7 +197,7 @@ class ChangeRule(CompareRule):
     def compare(self, event):
         key = hashable(lookup_es_key(event, self.rules['query_key']))
         values = []
-        elastalert_logger.debug(" Previous Values of compare keys  " + str(self.occurrences[key]))
+        elastalert_logger.debug(" Previous Values of compare keys  " + str(self.occurrences.get(key)))
         for val in self.rules['compound_compare_key']:
             lookup_value = lookup_es_key(event, val)
             values.append(lookup_value)

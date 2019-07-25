@@ -36,7 +36,7 @@ class RuleType(object):
         self.rules = rules
         if 'name' in rules:
             self.data_path = path.join('/var/lib/elastalert',
-                                       '{}.pickle'.format(rules['name']))
+                                       '{}.lpickle'.format(rules['name']))
         else:
             self.data_path = None
         self.occurrences = self.load()

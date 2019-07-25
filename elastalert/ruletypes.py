@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 import copy
 import datetime
+from dateutil import tz
 import dill
+from functools import partial
 from os import path
 from os import rename
 from larch import pickle
@@ -261,6 +263,64 @@ class FrequencyRule(RuleType):
         event = ({self.ts_field: ts}, count)
         self.occurrences.setdefault('all', EventWindow(self.rules['timeframe'], getTimestamp=self.get_ts)).append(event)
         self.check_for_match('all')
+
+    def load(self):
+        """Load occurrences from pickled file."""
+        if not self.data_path:
+            return {}
+        try:
+            with open(self.data_path, 'r') as data_file:
+                return dict(map(self._restore, pickle.load(data_file).iteritems()))
+        except Exception:
+            elastalert_logger.warning('Error loading %s', self.data_path, exc_info=True)
+            return {}
+
+    def _restore(self, entry):
+        key, values = entry
+        ts_field = self.rules.get('timestamp_field', '@timestamp')
+        eventwindow = EventWindow(
+            datetime.timedelta(seconds=values['timeframe']),
+            getTimestamp=new_get_event_ts(ts_field)
+        )
+        eventwindow.running_count = values['running_count']
+        restore_datetime = partial(self._restore_datetime, ts_field)
+        eventwindow.data.update(map(restore_datetime, values['data']))
+        return key, eventwindow
+
+    @staticmethod
+    def _restore_datetime(ts_field, occur):
+        occur[0][ts_field] = datetime.datetime.fromtimestamp(occur[0][ts_field], tz.tzlocal())
+        return occur
+
+    def save(self):
+        """Save occurrences to pickled file."""
+        if not self.data_path:
+            return
+        try:
+            occurrences = dict(map(self._transform, self.occurrences.iteritems()))
+            tmp_path = self.data_path + '.temp'
+            with open(tmp_path, 'w') as data_file:
+                pickle.dump(occurrences, data_file)
+            rename(tmp_path, self.data_path)
+        except IOError:
+            elastalert_logger.warning('Error saving to %s', self.data_path)
+
+    def  _transform(self, entry):
+        key, eventwindow = entry
+        ts_field = eventwindow.get_ts.func_closure[0].cell_contents
+        transform_datatime = partial(self._transform_datatime, ts_field)
+        value = {
+            'running_count': eventwindow.running_count,
+            'data': list(map(transform_datatime, eventwindow.data)),
+            'timeframe': eventwindow.timeframe.total_seconds(),
+        }
+        return key, value
+
+    @staticmethod
+    def _transform_datatime(ts_field, occur):
+        result = copy.deepcopy(occur)
+        result[0][ts_field] = (result[0][ts_field] - datetime.datetime(1970,1,1, tzinfo=tz.tzutc())).total_seconds()
+        return result
 
     def add_terms_data(self, terms):
         for timestamp, buckets in terms.iteritems():
